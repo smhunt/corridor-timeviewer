@@ -1,0 +1,172 @@
+# Change-over-time imagery tool -- area and source registry.
+#
+# The tool is not specific to any one place. An AOI profile defines where to
+# look; everything downstream (harvest, cache, viewer, animation) reads the
+# active profile. Add a profile, run `./harvest.py survey --aoi <name>`, and
+# the same pipeline works anywhere the archives have coverage.
+#
+# Profile kinds:
+#   bbox     -- a plain rectangle
+#   corridor -- a linear feature resolved live from OpenStreetMap, then
+#               buffered. Good for rail grades, rivers, highways, shorelines:
+#               anything whose change you want to read along its length.
+
+active: ilderton_rail_grade
+
+aoi_profiles:
+
+  ilderton_rail_grade:
+    label: Ilderton spur, London Huron & Bruce Railway
+    kind: corridor
+    # Hyde Park north to Ilderton. Track lifted c1995; the grade is now the
+    # Ilderton Rail Trail. Resolves to 97 OSM nodes, ~10.3 km north-south.
+    overpass: |
+      way["railway"="abandoned"]({{bbox}});
+      way["highway"~"path|cycleway"]["name"~"Rail Trail",i]({{bbox}});
+    search_bbox: [-81.42, 43.00, -81.28, 43.09]
+    buffer_m: 900
+    # How far past the corridor to catalogue. The viewer still opens on the
+    # corridor, but the surrounding townships come along -- and the archive
+    # flew them in years it never flew the spur.
+    context_m: 4000
+    subject: >
+      Reading the corridor from working railway to abandoned grade to rail
+      trail. The air photo years bracket the whole arc: active rail through
+      1989, track lifted between 1993 and 2001, trail surface thereafter.
+
+  # Template. Copy, rename, point the query at whatever linear feature you're
+  # reading, and set search_bbox generously around it.
+  example_corridor:
+    label: Any linear feature, anywhere
+    kind: corridor
+    overpass: |
+      way["waterway"="river"]({{bbox}});
+    search_bbox: [-81.40, 42.90, -81.10, 43.05]
+    buffer_m: 600
+
+  example_rectangle:
+    label: Any rectangle
+    kind: bbox
+    bbox: [-81.45, 43.00, -81.25, 43.09]
+
+overpass_url: https://overpass-api.de/api/interpreter
+
+
+# ---------------------------------------------------------------- archives
+# Per-photo catalogues with downloadable scans.
+
+archives:
+  western_madgic:
+    label: Western Libraries Air Photo Collection
+    status: verified
+    kind: arcgis_feature
+    url: https://services.arcgis.com/rGKxabTU9mcXMw7k/arcgis/rest/services/Western_Libraries_Air_Photo_Collection_Public_View/FeatureServer/0
+    coverage: London, Elgin, Middlesex, Oxford, Perth. 1922-2001.
+    year_field: Capture_Year
+    scan_field: Download_Photo
+    geotiff_field: Download_GeoTIFF
+    licence: >
+      Western Libraries Open Data Agreement; Canadian Copyright Act applies.
+      A 50-year restriction is posted on the collection. Check the
+      Open_Data_Agreement field per record before republishing frames.
+
+  napl_eodms:
+    label: National Air Photo Library (NRCan EODMS)
+    status: manual
+    kind: order_only
+    url: https://eodms-sgdot.nrcan-rncan.gc.ca/index-en.html
+    coverage: All of Canada, some frames back to the 1920s.
+    note: >
+      No public bulk API for scanned air photos. Search the AOI, order scans,
+      drop the delivered TIFFs in cache/manual/<year>/ and run
+      `./harvest.py adopt cache/manual`. This is the main option for anywhere
+      outside southwestern Ontario.
+
+  archives_ontario:
+    label: Archives of Ontario, Forest Resource Inventory air photos
+    status: manual
+    kind: order_only
+    url: http://www.archives.gov.on.ca/en/aerialphotos/index.aspx
+    coverage: RG 1-429-7, Lands & Forests / MNR flights 1946-1999, province-wide.
+    note: Interactive index, then reproduction request. Same adopt workflow.
+
+
+# ---------------------------------------------------------------- rasters
+# Live tile services, cached to disk on first request by serve.py.
+
+rasters:
+  osm:
+    label: OpenStreetMap
+    status: verified
+    kind: xyz
+    role: basemap          # drawn under every year, not part of the sequence
+    format: png
+    url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    attribution: "\u00a9 OpenStreetMap contributors"
+    licence: ODbL
+    note: >
+      Context under the photographs. Air photo coverage is partial in most
+      years, so the basemap gives the uncovered ground somewhere to be and
+      keeps each frame reading as an overlay. Tiles are proxied through
+      serve.py and cached to disk, so a long render hits the cache rather
+      than the tile server -- which is what OSM's usage policy asks for.
+
+  ontario_oiwms:
+    label: Ontario Imagery (current best available)
+    status: verified       # resolves from a home connection; 2023 tiles cached
+    kind: xyz
+    url: https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_Imagery/Ontario_Imagery_Web_Map_Service/MapServer/WMTS/tile/1.0.0/LIO_Imagery_Ontario_Imagery_Web_Map_Service/default/default028mm/{z}/{y}/{x}.jpg
+    # The Source layer reports what is actually behind these pixels over the
+    # corridor: South Western Ontario Orthophotography 2025, across all 91
+    # footprints intersecting the AOI. Not 2023, which was the service build.
+    year: 2025
+    licence: Open Government Licence - Ontario
+
+  ontario_oiwms_source:
+    label: Ontario Imagery acquisition footprints
+    status: untested
+    kind: arcgis_query
+    url: https://ws.lioservices.lrc.gov.on.ca/arcgis1071a/rest/services/LIO_Imagery/Ontario_Imagery_Web_Map_Service_Source/MapServer
+    note: >
+      Gives the true capture date behind each pixel of the basemap, so a frame
+      can be labelled with the year it was actually flown rather than the year
+      the service was published.
+
+  swoop:
+    label: Southwestern Ontario Orthophotography Project
+    status: untested
+    kind: geohub
+    portal: https://geohub.lio.gov.on.ca/pages/ontario-imagery-program
+    years: [2006, 2010, 2015, 2020]
+    resolutions_cm: {2006: 30, 2010: 20, 2015: 16, 2020: 16}
+    note: >
+      Pre-2013 acquisitions publish as hosted WMTS, 2013+ as ArcGIS Image
+      Services. Run `./serve.py discover swoop` to resolve the per-year
+      endpoints, then paste them back here as `xyz` entries.
+    licence: Open Government Licence - Ontario
+
+  middlesex_county:
+    label: Middlesex County orthophoto
+    status: untested
+    kind: arcgis_export
+    url: https://maps.middlesex.ca/arcgis/rest/services
+    years: [1999, 2003, 2006, 2010]
+
+
+# ---------------------------------------------------------------- animation
+# What the exporter opens with. Every one of these is a live control in the
+# viewer, so this is a starting point rather than a fixed setting.
+
+animation:
+  pacing: chronological      # chronological (gaps sized to real elapsed years) | even
+  seconds_per_year: 1.6      # dwell on each captured year
+  transition: 0.8            # seconds of blend into the next year
+  interpolation: crossfade   # cut | crossfade | ease
+  easing: ease-in-out        # linear | ease-in-out | ease-out
+  fps: 30
+  hold_first: 1.0
+  hold_last: 2.0
+  width: 1920
+  height: 1080
+  label: true                # burn the capture year into the frame
+  attribution: true          # burn the source credit into the frame

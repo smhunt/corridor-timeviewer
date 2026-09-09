@@ -1,0 +1,17 @@
+# The cache is the point, but it is gigabytes of other people's imagery under
+# a 50-year copyright restriction. It rebuilds from `survey` + `fetch`.
+cache/
+export/
+
+# Generated from the cache by `harvest.py manifest`.
+viewer/manifest.json
+
+# Rendered frames of Western's collection. The repository is public and the
+# collection carries a 50-year copyright restriction plus a per-record open
+# data agreement -- the README says to check it before publishing frames.
+# Cleared for release? Delete this line, or `git add -f examples/`.
+examples/
+
+.DS_Store
+__pycache__/
+*.pyc

@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corridor — change over time</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600&family=Barlow:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Cold silver-gelatin greys, with signal-lamp amber for the live year.
+     Aspect colours belong to the subject: this corridor was a signalled
+     railway before it was a trail. */
+  --ink:#0E1013; --panel:#161A20; --panel-2:#1E242C;
+  --rule:#2C333D; --rule-hot:#3C4654;
+  --dim:#78838F; --mid:#A8B3BE; --bright:#E9EDF1;
+  --amber:#E8A62C; --amber-dim:#8A6417;
+  --survey:#4EA3C7;      /* surveyor's line: the corridor centreline */
+  --lifted:#B4553F;      /* the years the track came out */
+  --tap:44px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--bright);
+  font-family:Barlow,system-ui,sans-serif;overscroll-behavior:none}
+#map{position:absolute;inset:0}
+.maplibregl-ctrl-attrib{font-size:10px}
+
+/* ---------------------------------------------------------- chrome */
+.eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+
+#head{position:absolute;top:0;left:0;right:0;padding:14px 18px 34px;z-index:3;
+  pointer-events:none;
+  background:linear-gradient(180deg,rgba(14,16,19,.88),rgba(14,16,19,0))}
+#head h1{margin:2px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:500;
+  font-size:20px;letter-spacing:.01em}
+#head .meta{margin-top:3px;font-size:12px;color:var(--mid)}
+
+/* ---------------------------------------------------------- docs */
+#docsWrap{position:absolute;inset:0;z-index:9;display:none;
+  background:rgba(8,10,12,.72);backdrop-filter:blur(2px)}
+#docsWrap.open{display:block}
+#docs{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:min(760px,calc(100vw - 32px));max-height:min(78vh,720px);overflow:auto;
+  background:var(--panel);border:1px solid var(--rule);border-radius:3px;
+  padding:0 22px 22px}
+#docsHead{position:sticky;top:0;background:var(--panel);padding:18px 0 10px;
+  border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:10px}
+#docsHead h2{margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:500;
+  font-size:19px;letter-spacing:.01em;flex:1}
+#docsTabs{display:flex;gap:6px;margin:14px 0 4px}
+#docs h3{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:12px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--amber);
+  margin:20px 0 6px}
+#docs p,#docs li{font-size:13px;line-height:1.55;color:var(--mid);margin:6px 0}
+#docs b{color:var(--bright);font-weight:500}
+#docs ul{margin:6px 0;padding-left:18px}
+#docs .sect{display:none}
+#docs .sect.on{display:block}
+#docs code{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--bright);
+  background:var(--panel-2);padding:1px 5px;border-radius:2px}
+.pri{font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink);background:var(--amber);
+  padding:1px 6px;border-radius:2px;margin-right:7px;vertical-align:1px}
+.pri.med{background:var(--survey)} .pri.low{background:var(--rule-hot);color:var(--mid)}
+
+/* ---------------------------------------------------------- year rail
+   The signature. Years sit at their true position in time, so the eleven
+   year gap between 1955 and 1967 reads as a gap. Notch height is how many
+   frames that year holds. The band marks when the track came out. */
+#rail{position:absolute;left:0;right:0;bottom:0;z-index:4;
+  padding:0 16px 14px;background:linear-gradient(0deg,rgba(14,16,19,.95),rgba(14,16,19,0))}
+#railInner{position:relative;height:78px;border-top:1px solid var(--rule);
+  cursor:ew-resize;touch-action:none}
+#railBand{position:absolute;top:0;bottom:26px;background:rgba(180,85,63,.16);
+  border-left:1px solid var(--lifted);border-right:1px solid var(--lifted);
+  pointer-events:none}
+#railBand span{position:absolute;top:4px;left:6px;font-size:10px;color:var(--lifted);
+  font-family:'Barlow Condensed',sans-serif;letter-spacing:.12em;text-transform:uppercase;
+  white-space:nowrap}
+.notch{position:absolute;bottom:26px;width:2px;background:var(--rule-hot);
+  transform:translateX(-1px);pointer-events:none;transition:background .18s}
+.notch.on{background:var(--amber)}
+.notch.thin{background:var(--rule);width:1px}
+.tick{position:absolute;bottom:6px;transform:translateX(-50%);font-size:10px;
+  color:var(--dim);pointer-events:none;white-space:nowrap}
+.tick.on{color:var(--amber)}
+#playhead{position:absolute;top:0;bottom:22px;width:1px;background:var(--amber);
+  pointer-events:none;box-shadow:0 0 12px rgba(232,166,44,.55)}
+#playhead::after{content:'';position:absolute;top:-4px;left:-3px;width:7px;height:7px;
+  background:var(--amber);transform:rotate(45deg)}
+
+#readout{display:flex;align-items:baseline;gap:12px;padding:0 2px 8px}
+#yearNow{font-family:'Barlow Condensed',sans-serif;font-size:38px;font-weight:600;
+  line-height:.9;color:var(--amber);letter-spacing:.01em}
+#yearNote{font-size:12px;color:var(--mid)}
+#yearNote b{color:var(--bright);font-weight:500}
+
+/* ---------------------------------------------------------- controls */
+#bar{display:flex;gap:8px;align-items:center;padding:0 2px 10px;flex-wrap:wrap}
+button{font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--mid);
+  background:var(--panel-2);border:1px solid var(--rule);border-radius:2px;
+  min-height:var(--tap);padding:0 14px;cursor:pointer;transition:.15s}
+button:hover{border-color:var(--rule-hot);color:var(--bright)}
+button.primary{background:var(--amber);border-color:var(--amber);color:#1A1204;font-weight:600}
+button.primary:hover{background:#F2B33C}
+button[aria-pressed=true]{color:var(--amber);border-color:var(--amber-dim)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--survey);outline-offset:2px}
+
+#panel{position:absolute;top:64px;right:14px;width:280px;z-index:5;
+  background:rgba(22,26,32,.94);border:1px solid var(--rule);border-radius:3px;
+  backdrop-filter:blur(8px);max-height:calc(100% - 220px);overflow:auto}
+#panel header{display:flex;justify-content:space-between;align-items:center;
+  padding:11px 13px;border-bottom:1px solid var(--rule)}
+#panel .body{padding:11px 13px 14px}
+#panel.closed .body{display:none}
+.field{margin-bottom:12px}
+.field label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11px;color:var(--dim);margin-bottom:5px;
+  font-family:'Barlow Condensed',sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.field label .v{color:var(--amber);font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:0;text-transform:none}
+input[type=range]{width:100%;accent-color:var(--amber);height:var(--tap)}
+select,input[type=text]{width:100%;background:var(--ink);color:var(--bright);
+  border:1px solid var(--rule);border-radius:2px;padding:9px;font-size:13px;
+  font-family:Barlow,sans-serif;min-height:38px}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{flex:1;border:0;border-radius:0;min-height:38px;padding:0 6px}
+.seg button+button{border-left:1px solid var(--rule)}
+.hint{font-size:11px;color:var(--dim);line-height:1.45;margin:-4px 0 12px}
+#progress{height:2px;background:var(--rule);margin-top:8px;display:none}
+#progress div{height:100%;width:0;background:var(--amber);transition:width .1s}
+#status{font-size:11px;color:var(--mid);margin-top:8px;min-height:15px;line-height:1.4}
+
+/* frame inventory strip: what is actually loaded for the live year */
+#inv{display:flex;gap:2px;margin-top:9px;height:16px;align-items:flex-end}
+#inv i{flex:1;background:var(--rule);height:5px;border-radius:1px}
+#inv i.has{background:var(--survey);height:14px}
+
+@media (max-width:760px){
+  #panel{position:absolute;top:auto;bottom:0;left:0;right:0;width:auto;
+    max-height:58%;border-radius:3px 3px 0 0}
+  #head h1{font-size:17px}
+  #yearNow{font-size:32px}
+  #railInner{height:64px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="head">
+  <div class="eyebrow" id="kicker">Loading</div>
+  <h1 id="title">—</h1>
+  <div class="meta" id="subtitle"></div>
+</div>
+
+<section id="panel" aria-label="Animation settings">
+  <header>
+    <span class="eyebrow">Animation</span>
+    <button id="panelToggle" aria-expanded="true" style="min-height:26px;padding:0 8px">Hide</button>
+  </header>
+  <div class="body">
+    <div class="field">
+      <label for="pacing">Pacing</label>
+      <select id="pacing">
+        <option value="chronological">Chronological — gaps sized to real years</option>
+        <option value="even">Even — equal time per capture</option>
+      </select>
+    </div>
+    <p class="hint">Chronological keeps the 1955–1967 gap visible as a gap. Even gives every capture the same screen time.</p>
+
+    <div class="field">
+      <label for="spy">Speed <span class="v" id="spyV">1.6 s/yr</span></label>
+      <input type="range" id="spy" min="0.3" max="6" step="0.1" value="1.6">
+    </div>
+
+    <div class="field">
+      <label>Interpolation</label>
+      <div class="seg" role="group">
+        <button data-interp="cut">Cut</button>
+        <button data-interp="crossfade" aria-pressed="true">Crossfade</button>
+        <button data-interp="ease">Ease</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="trans">Blend length <span class="v" id="transV">0.8 s</span></label>
+      <input type="range" id="trans" min="0" max="3" step="0.1" value="0.8">
+    </div>
+
+    <div class="field">
+      <label for="fps">Frame rate <span class="v" id="fpsV">30 fps</span></label>
+      <input type="range" id="fps" min="12" max="60" step="1" value="30">
+    </div>
+
+    <div class="field">
+      <label for="drift">Camera drift <span class="v" id="driftV">off</span></label>
+      <input type="range" id="drift" min="0" max="0.5" step="0.01" value="0">
+    </div>
+    <p class="hint">A slow push in over the whole run. Keep it small — the imagery is the subject.</p>
+
+    <div class="field">
+      <label for="take">Take name</label>
+      <input type="text" id="take" value="corridor">
+    </div>
+
+    <div class="field" style="display:flex;gap:8px">
+      <button id="exportWebm" style="flex:1">WebM</button>
+      <button id="exportFrames" class="primary" style="flex:1">Frames → ffmpeg</button>
+    </div>
+    <p class="hint">WebM records in real time straight from the browser. Frames renders each one deterministically and posts to <span class="num">export/</span> — slower, but no dropped frames, and serve.py prints the ffmpeg line for MP4, ProRes or GIF.</p>
+    <div id="progress"><div></div></div>
+    <div id="status"></div>
+    <div id="inv" title="Frames loaded for the live year"></div>
+  </div>
+</section>
+
+<div id="rail">
+  <div id="readout">
+    <div id="yearNow" class="num">—</div>
+    <div id="yearNote"></div>
+  </div>
+  <div id="bar">
+    <button id="play" class="primary">Play</button>
+    <button id="prev">◀ Prev</button>
+    <button id="next">Next ▶</button>
+    <button id="loop" aria-pressed="true">Loop</button>
+    <button id="baseBtn" aria-pressed="true">Basemap</button>
+    <button id="holdingsBtn" aria-pressed="true">Holdings</button>
+    <button id="corridorBtn" aria-pressed="true">Centreline</button>
+    <button id="fit">Fit corridor</button>
+    <button id="docsBtn" title="How to read this">Docs</button>
+  </div>
+  <div id="railInner" role="slider" tabindex="0" aria-label="Capture year"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+</div>
+
+<div id="docsWrap">
+  <div id="docs" role="dialog" aria-modal="true" aria-label="Documentation">
+    <div id="docsHead">
+      <h2>Corridor</h2>
+      <span class="num eyebrow" id="docsVer"></span>
+      <button id="docsClose" style="min-height:26px;padding:0 9px">Close</button>
+    </div>
+    <div id="docsTabs">
+      <button data-doc="read" aria-pressed="true">How to read it</button>
+      <button data-doc="road">Roadmap</button>
+      <button data-doc="log">Changelog</button>
+    </div>
+
+    <div class="sect on" data-sect="read">
+      <h3>The year rail</h3>
+      <p>The rail along the bottom is the record, not a slider. Horizontal
+      position is <b>when</b>, so the eleven-year hole between 1955 and 1967
+      reads as a hole. Notch height is how many frames that year holds. A
+      <b>thin notch</b> is a year the archive photographed but nobody has
+      placed — it is on the rail because it is part of the record. The red band
+      marks the years the track came out.</p>
+      <h3>Rings and dots</h3>
+      <p>Every exposure the archive holds for the live year, on disk or not. An
+      <b>amber ring</b> ships georeferenced and could be placed today. A
+      <b>grey dot</b> needs georeferencing in QGIS first. Faded means already
+      placed. Click one for its roll and status.</p>
+      <h3>Why the frames are crooked</h3>
+      <p>Each exposure is rotated inside a north-up grid, so about a third of
+      every scan is black. They are placed as four-corner quads, which keeps
+      the image honest instead of smearing it into a lat/lon rectangle and
+      letting the black wedges cover the neighbouring frame.</p>
+      <h3>Beyond the corridor</h3>
+      <p>The map opens on the subject but is not confined to it. The catalogue
+      reaches <code>context_m</code> past the corridor, so panning out finds
+      photography flown over the surrounding townships in years the spur itself
+      was never flown — 1922, 1945, 1960, 1964, 1965, 1972.</p>
+      <h3>Exporting</h3>
+      <p><b>WebM</b> records the canvas in real time: fast, fine for sharing,
+      drops frames if the browser does. <b>Frames → ffmpeg</b> renders each
+      frame deterministically and posts it to <code>export/</code> — slower,
+      but nothing is dropped. The ffmpeg command prints in the serve.py
+      terminal when the last frame lands.</p>
+    </div>
+
+    <div class="sect" data-sect="road"><div id="roadBody"></div></div>
+    <div class="sect" data-sect="log"><div id="logBody"></div></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+const APP_VERSION = '0.2.0';
+
+const ROADMAP = [
+  {pri:'high', label:'High', note:'the record has holes where the story is', items:[
+    'Georeference 1993, 1998 and 2001 — the years the track came out, none with a downloadable scan.',
+    'Georeference 1950 and 1978: the densest years in the archive, contributing nothing to the animation.',
+    'Fold in SWOOP 2006/2010/2015/2020 — open licence, and exactly the decades between the last air photo and today.']},
+  {pri:'med', label:'Medium', note:'the viewer strains as coverage grows', items:[
+    'Load frames lazily. Every placed frame becomes an image source at page load.',
+    'Fit to holdings, not just to the corridor.',
+    'Filter holdings by availability — 1950 covers the map in dots.',
+    'Per-year opacity or a swipe, for reading one change rather than comparing two years.']},
+  {pri:'low', label:'Low', note:'nothing is blocked on these', items:[
+    'Label modern frames with the flight date the source layer reports, not the dataset year.',
+    'Run a second corridor — a river, a highway — to test the claim that nothing here is specific.',
+    'Burn label and attribution into exported frames.']}
+];
+
+const CHANGELOG = [
+  {version:'0.2.0', date:'2026-09-09', changes:[
+    'Catalogue reaches past the subject: context_m / --expand, 1,063 photos across 20 years.',
+    'Holdings layer — every exposure the archive holds, placed or not.',
+    'All catalogued years on the rail, not just the years with imagery.',
+    'OpenStreetMap under the photographs, proxied and cached.',
+    'Current Ontario imagery is SWOOP 2025, corrected from a mislabelled 2023.']},
+  {version:'0.1.0', date:'2026-09-06', changes:[
+    'First working build end to end: survey, fetch, place, serve, export.',
+    'Fixed the map-load race that left the viewer empty with no error.',
+    'Fixed / never reaching the viewer, and dead tiles stalling a render.',
+    'HTTPS on 3033; an interrupted fetch no longer discards the asset ledger.']}
+];
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let M = null;            // manifest
+let YEARS = [];          // [{year, layers:[layerId], loaded}]
+let timeline = [];       // [{year, t}] normalised 0..1 positions
+let pos = 0;             // continuous position along the timeline
+let playing = false, rafId = null, lastT = 0;
+let shownHoldings = null;   // year currently drawn in the holdings layer
+let opts = {pacing:'chronological', spy:1.6, interp:'crossfade', trans:0.8,
+            fps:30, drift:0, loop:true};
+
+const map = new maplibregl.Map({
+  container:'map',
+  style:{version:8, sources:{}, layers:[{id:'bg',type:'background',paint:{'background-color':'#0E1013'}}]},
+  center:[-81.365,43.044], zoom:12, attributionControl:{compact:true},
+  preserveDrawingBuffer:true   // required to read pixels back for export
+});
+// Settled synchronously, before init() awaits the manifest. MapLibre's load
+// event fires once and does not replay for a listener added afterwards, so a
+// handler registered after the fetch resolves is simply lost whenever the map
+// wins the race -- the map stays empty and nothing says why.
+const mapReady = new Promise(resolve => {
+  if(map.loaded()) return resolve();
+  map.on('load', resolve);
+});
+
+map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-left');
+map.addControl(new maplibregl.ScaleControl({unit:'metric'}), 'bottom-left');
+
+// ------------------------------------------------------------ load
+(async function init(){
+  try{
+    M = await (await fetch('manifest.json?' + Date.now())).json();
+  }catch(e){
+    $('#kicker').textContent = 'No manifest';
+    $('#title').textContent = 'Run ./harvest.py survey, then fetch';
+    return;
+  }
+  const aoi = M.aoi || {};
+  $('#kicker').textContent = aoi.kind === 'corridor' ? 'Corridor' : 'Area';
+  $('#title').textContent = aoi.label || 'Change over time';
+  const km = aoi.length_km ? `${aoi.length_km} km · ` : '';
+  $('#subtitle').textContent = `${km}${(M.years||[]).length} capture years · ${(M.photos||[]).length} frames catalogued`;
+  Object.assign(opts, {
+    spy: M.animation?.seconds_per_year ?? opts.spy,
+    trans: M.animation?.transition ?? opts.trans,
+    fps: M.animation?.fps ?? opts.fps,
+    interp: M.animation?.interpolation ?? opts.interp,
+    pacing: M.animation?.pacing ?? opts.pacing,
+  });
+  syncControls();
+
+  await mapReady;
+  if (aoi.bbox) map.fitBounds([[aoi.bbox[0],aoi.bbox[1]],[aoi.bbox[2],aoi.bbox[3]]], {padding:60, duration:0});
+  addBasemap(M.rasters);
+  addHoldings(M.photos);
+  addCentreline(aoi.geometry);
+  buildYears();
+  buildRail();
+  setPos(0, true);
+})();
+
+// A map under the photographs. Coverage is partial in most years, so the
+// basemap gives the uncovered ground somewhere to be and keeps each frame
+// reading as an overlay rather than floating in black. Desaturated hard,
+// because the subject is the silver-gelatin imagery on top of it.
+function addBasemap(rasters){
+  const b = (rasters || []).find(r => r.role === 'basemap' && r.kind === 'xyz');
+  if(!b) return;
+  map.addSource('basemap', {
+    type:'raster', tiles:[`/tiles/${b.id}/{z}/{x}/{y}`], tileSize:256,
+    attribution: b.attribution || ''
+  });
+  map.addLayer({id:'basemap', type:'raster', source:'basemap',
+    paint:{'raster-opacity':.5,'raster-saturation':-.85,'raster-contrast':-.1,
+           'raster-brightness-max':.85,'raster-fade-duration':0}});
+}
+
+// Every exposure the archive holds over the catalogued area, whether or not
+// it is on disk. Most of the record is not georeferenced and never will be
+// without hand work, so the map would otherwise say "nothing here" about
+// ground the archive has photographed forty times. A ring is a photo you
+// could place; a dot is one you would have to georeference first.
+function addHoldings(photos){
+  const feats = (photos || [])
+    .filter(p => p.lon && p.lat && p.year)
+    .map(p => ({
+      type:'Feature',
+      properties:{
+        year: p.year,
+        placeable: !!p.geotiff_url,
+        cached: !!(p.cached && p.cached.web),
+        label: `${p.year} · roll ${p.roll || '?'} · ${p.geotiff_url ? 'georeferenced'
+                 : p.scan_url ? 'scan, needs georeferencing' : 'order from the archive'}`
+      },
+      geometry:{type:'Point', coordinates:[p.lon, p.lat]}
+    }));
+  if(!feats.length) return;
+  map.addSource('holdings', {type:'geojson',
+    data:{type:'FeatureCollection', features:feats}});
+  map.addLayer({id:'holdings', type:'circle', source:'holdings',
+    filter:['==', ['get','year'], -1],
+    paint:{
+      'circle-radius':['case',['get','placeable'], 4.5, 3],
+      'circle-color':['case',['get','placeable'], '#E8A62C', '#78838F'],
+      'circle-opacity':['case',['get','cached'], .25, .75],
+      'circle-stroke-width':['case',['get','placeable'], 1.2, 0],
+      'circle-stroke-color':'#0E1013'
+    }});
+
+  const pop = new maplibregl.Popup({closeButton:false, closeOnClick:true});
+  map.on('click', 'holdings', e => {
+    pop.setLngLat(e.features[0].geometry.coordinates)
+       .setText(e.features[0].properties.label).addTo(map);
+  });
+  map.on('mouseenter', 'holdings', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'holdings', () => map.getCanvas().style.cursor = '');
+}
+
+function addCentreline(geo){
+  if(!geo) return;
+  map.addSource('centreline', {type:'geojson', data:geo});
+  map.addLayer({id:'centreline-halo', type:'line', source:'centreline',
+    paint:{'line-color':'#0E1013','line-width':4.5,'line-opacity':.55}});
+  map.addLayer({id:'centreline', type:'line', source:'centreline',
+    paint:{'line-color':'#4EA3C7','line-width':1.4,'line-dasharray':[3,2.5],'line-opacity':.9}});
+}
+
+// Every year becomes one group of image layers. Georeferenced scans are
+// placed as four-corner quads, which keeps the rotated exposure honest
+// instead of smearing it into a lat/lon rectangle.
+function buildYears(){
+  const byYear = new Map();
+  for(const p of (M.photos||[])){
+    const web = p.cached && p.cached.web;
+    if(!web || !web.corners || !p.year) continue;
+    if(!byYear.has(p.year)) byYear.set(p.year, []);
+    byYear.get(p.year).push({p, web});
+  }
+  for(const r of (M.rasters||[])){
+    if(r.year && r.kind === 'xyz') {
+      if(!byYear.has(r.year)) byYear.set(r.year, []);
+      byYear.get(r.year).push({raster:r});
+    }
+  }
+  // Imagery goes under the centreline, but a bbox AOI has no centreline to
+  // go under. Passing a beforeId that does not exist throws.
+  const under = map.getLayer('centreline-halo') ? 'centreline-halo' : undefined;
+
+  // Every catalogued year gets a place on the rail, not just the years with
+  // something to draw. A year the archive flew forty times and nobody has
+  // georeferenced is part of the record, and the thin notch says so.
+  for(const y of (M.years || [])) if(!byYear.has(y.year)) byYear.set(y.year, []);
+
+  YEARS = [...byYear.keys()].sort((a,b)=>a-b).map(year => {
+    const items = byYear.get(year), layers = [];
+    items.forEach((it, i) => {
+      const id = `y${year}_${i}`;
+      if(it.raster){
+        map.addSource(id, {type:'raster', tiles:[`/tiles/${it.raster.id}/{z}/{x}/{y}`], tileSize:256});
+        map.addLayer({id, type:'raster', source:id,
+          paint:{'raster-opacity':0,'raster-fade-duration':0}}, under);
+      } else {
+        map.addSource(id, {type:'image', url:'../'+it.web.path, coordinates:it.web.corners});
+        map.addLayer({id, type:'raster', source:id,
+          paint:{'raster-opacity':0,'raster-fade-duration':0,'raster-resampling':'linear'}}, under);
+      }
+      layers.push(id);
+    });
+    const meta = (M.years||[]).find(y=>y.year===year) || {};
+    return {year, layers, catalogued: meta.photos || items.length, placed: layers.length};
+  });
+
+  if(!YEARS.length){
+    $('#status').textContent = 'No georeferenced frames cached yet. Run ./harvest.py fetch --georef-only';
+  }
+  buildTimeline();
+}
+
+// Timeline positions. Chronological spaces years by elapsed time so a long
+// gap in the record reads as a long gap on screen.
+function buildTimeline(){
+  if(!YEARS.length){ timeline = []; return; }
+  const ys = YEARS.map(y=>y.year);
+  const lo = ys[0], hi = ys[ys.length-1], span = Math.max(hi-lo, 1);
+  timeline = YEARS.map((y,i)=>({
+    year: y.year,
+    t: opts.pacing === 'chronological'
+        ? (y.year - lo) / span
+        : (YEARS.length===1 ? 0 : i/(YEARS.length-1))
+  }));
+}
+
+// ------------------------------------------------------------ rendering
+function easeFn(x){
+  if(opts.interp === 'cut') return x < 1 ? 0 : 1;
+  if(opts.interp === 'ease') return x<.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
+  return x; // crossfade: linear blend
+}
+
+function setPos(p, snapCam){
+  pos = clamp(p, 0, 1);
+  if(!timeline.length) return;
+
+  // find the bracketing captures and how far between them we are
+  let i = 0;
+  while(i < timeline.length-1 && timeline[i+1].t <= pos) i++;
+  const a = timeline[i], b = timeline[Math.min(i+1, timeline.length-1)];
+  const gap = Math.max(b.t - a.t, 1e-6);
+  const raw = clamp((pos - a.t) / gap, 0, 1);
+
+  // The blend only occupies the tail of each gap, so each year holds still
+  // before handing over. Blend length is in seconds, converted to a share
+  // of this gap.
+  const gapSeconds = gap * totalSeconds();
+  const share = gapSeconds > 0 ? clamp(opts.trans / gapSeconds, 0, 1) : 1;
+  const x = share <= 0 ? (raw < 1 ? 0 : 1)
+          : clamp((raw - (1 - share)) / share, 0, 1);
+  const blend = easeFn(x);
+
+  YEARS.forEach(y => {
+    let o = 0;
+    if(y.year === a.year) o = 1 - blend;
+    if(y.year === b.year) o = Math.max(o, blend);
+    if(a.year === b.year && y.year === a.year) o = 1;
+    y.layers.forEach(id => {
+      if(map.getLayer(id)) map.setPaintProperty(id, 'raster-opacity', o);
+    });
+  });
+
+  const live = blend >= .5 ? b : a;
+  if(map.getLayer('holdings') && live.year !== shownHoldings){
+    shownHoldings = live.year;
+    map.setFilter('holdings', ['==', ['get','year'], live.year]);
+  }
+  paintRail(live.year, pos);
+  paintReadout(live.year, blend, a, b);
+
+  if(opts.drift > 0 && snapCam !== 'nocam'){
+    map.setZoom(baseZoom + opts.drift * 2.2 * pos);
+  }
+}
+
+function totalSeconds(){
+  if(timeline.length < 2) return opts.spy;
+  return opts.pacing === 'chronological'
+    ? (timeline[timeline.length-1].year - timeline[0].year) / averageGapYears() * opts.spy
+    : (timeline.length - 1) * opts.spy;
+}
+function averageGapYears(){
+  if(timeline.length < 2) return 1;
+  const gaps = [];
+  for(let i=1;i<timeline.length;i++) gaps.push(timeline[i].year - timeline[i-1].year);
+  return gaps.reduce((s,v)=>s+v,0) / gaps.length;
+}
+
+let baseZoom = 12;
+mapReady.then(()=> baseZoom = map.getZoom());
+
+// ------------------------------------------------------------ rail
+function buildRail(){
+  const rail = $('#railInner');
+  rail.querySelectorAll('.notch,.tick,#railBand,#playhead').forEach(n=>n.remove());
+  if(!timeline.length) return;
+  const peak = Math.max(...YEARS.map(y=>y.catalogued), 1);
+
+  // the years the track came out, drawn from the record itself
+  const band = document.createElement('div');
+  band.id = 'railBand';
+  const lifted = [1989, 2001];
+  const l0 = posOfYear(lifted[0]), l1 = posOfYear(lifted[1]);
+  band.style.left = (l0*100)+'%'; band.style.width = ((l1-l0)*100)+'%';
+  band.innerHTML = '<span>track lifted</span>';
+  rail.appendChild(band);
+
+  YEARS.forEach((y,i) => {
+    const t = timeline[i].t;
+    const n = document.createElement('div');
+    n.className = 'notch' + (y.placed ? '' : ' thin');
+    n.dataset.year = y.year;
+    n.style.left = (t*100)+'%';
+    n.style.height = (10 + 40*(y.catalogued/peak)) + 'px';
+    rail.appendChild(n);
+
+    // label every year if there is room, otherwise thin them out
+    if(YEARS.length <= 16 || i===0 || i===YEARS.length-1 || i%2===0){
+      const k = document.createElement('div');
+      k.className = 'tick num'; k.dataset.year = y.year;
+      k.style.left = (t*100)+'%'; k.textContent = String(y.year).slice(2);
+      rail.appendChild(k);
+    }
+  });
+  const ph = document.createElement('div'); ph.id = 'playhead'; rail.appendChild(ph);
+}
+
+function posOfYear(year){
+  if(!timeline.length) return 0;
+  const lo = timeline[0], hi = timeline[timeline.length-1];
+  if(year <= lo.year) return 0;
+  if(year >= hi.year) return 1;
+  for(let i=1;i<timeline.length;i++){
+    const a = timeline[i-1], b = timeline[i];
+    if(year <= b.year) return a.t + (b.t-a.t)*((year-a.year)/Math.max(b.year-a.year,1));
+  }
+  return 1;
+}
+
+function paintRail(liveYear, p){
+  const ph = $('#playhead'); if(ph) ph.style.left = (p*100)+'%';
+  document.querySelectorAll('.notch').forEach(n =>
+    n.classList.toggle('on', +n.dataset.year === liveYear));
+  document.querySelectorAll('.tick').forEach(n =>
+    n.classList.toggle('on', +n.dataset.year === liveYear));
+  $('#railInner').setAttribute('aria-valuenow', Math.round(p*100));
+}
+
+function paintReadout(year, blend, a, b){
+  $('#yearNow').textContent = year;
+  const y = YEARS.find(v=>v.year===year) || {};
+  const bits = [];
+  if(y.placed) bits.push(`<b>${y.placed}</b> frame${y.placed===1?'':'s'} placed`);
+  if(y.catalogued > y.placed) bits.push(`${y.catalogued - y.placed} catalogued, not cached`);
+  if(a.year !== b.year && blend > 0 && blend < 1)
+    bits.push(`blending into <b>${b.year}</b>`);
+  $('#yearNote').innerHTML = bits.join(' · ');
+
+  const inv = $('#inv'); inv.innerHTML = '';
+  YEARS.forEach(v => {
+    const i = document.createElement('i');
+    if(v.placed) i.className = 'has';
+    i.title = `${v.year}: ${v.placed} placed of ${v.catalogued}`;
+    inv.appendChild(i);
+  });
+}
+
+// ------------------------------------------------------------ playback
+function tick(ts){
+  if(!playing) return;
+  const dt = lastT ? (ts - lastT)/1000 : 0;
+  lastT = ts;
+  const total = totalSeconds();
+  let p = pos + dt/Math.max(total, .1);
+  if(p >= 1){
+    if(opts.loop){ p = 0; }
+    else { p = 1; stop(); }
+  }
+  setPos(p);
+  rafId = requestAnimationFrame(tick);
+}
+function play(){ if(!timeline.length) return; playing = true; lastT = 0;
+  $('#play').textContent = 'Pause'; rafId = requestAnimationFrame(tick); }
+function stop(){ playing = false; $('#play').textContent = 'Play';
+  if(rafId) cancelAnimationFrame(rafId); rafId = null; }
+
+$('#play').onclick = () => playing ? stop() : play();
+$('#loop').onclick = e => { opts.loop = !opts.loop;
+  e.currentTarget.setAttribute('aria-pressed', opts.loop); };
+$('#prev').onclick = () => step(-1);
+$('#next').onclick = () => step(1);
+function step(d){
+  stop();
+  let i = timeline.findIndex(t => t.t > pos + 1e-4);
+  if(i === -1) i = timeline.length;
+  const target = clamp((d > 0 ? i : timeline.findLastIndex(t => t.t < pos - 1e-4)), 0, timeline.length-1);
+  setPos(timeline[target].t);
+}
+// ---- docs
+(function docs(){
+  $('#docsVer').textContent = 'v' + APP_VERSION;
+  $('#roadBody').innerHTML = ROADMAP.map(g =>
+    `<h3><span class="pri ${g.pri === 'high' ? '' : g.pri}">${g.label}</span>${g.note}</h3>
+     <ul>${g.items.map(i => `<li>${i}</li>`).join('')}</ul>`).join('');
+  $('#logBody').innerHTML = CHANGELOG.map(v =>
+    `<h3>${v.version} <span style="color:var(--dim);letter-spacing:0">${v.date}</span></h3>
+     <ul>${v.changes.map(c => `<li>${c}</li>`).join('')}</ul>`).join('');
+
+  const wrap = $('#docsWrap');
+  const open = on => {
+    wrap.classList.toggle('open', on);
+    $('#docsBtn').setAttribute('aria-pressed', on);
+  };
+  $('#docsBtn').onclick = () => open(!wrap.classList.contains('open'));
+  $('#docsClose').onclick = () => open(false);
+  wrap.onclick = e => { if(e.target === wrap) open(false); };
+  addEventListener('keydown', e => { if(e.key === 'Escape') open(false); });
+  document.querySelectorAll('#docsTabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#docsTabs button').forEach(o =>
+      o.setAttribute('aria-pressed', o === b));
+    document.querySelectorAll('#docs .sect').forEach(sc =>
+      sc.classList.toggle('on', sc.dataset.sect === b.dataset.doc));
+  });
+})();
+
+$('#fit').onclick = () => {
+  const b = M.aoi?.bbox; if(b) map.fitBounds([[b[0],b[1]],[b[2],b[3]]], {padding:60});
+};
+$('#holdingsBtn').onclick = e => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', on);
+  if(map.getLayer('holdings'))
+    map.setLayoutProperty('holdings', 'visibility', on ? 'visible' : 'none');
+};
+$('#baseBtn').onclick = e => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', on);
+  if(map.getLayer('basemap'))
+    map.setLayoutProperty('basemap', 'visibility', on ? 'visible' : 'none');
+};
+$('#corridorBtn').onclick = e => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', on);
+  ['centreline','centreline-halo'].forEach(id => {
+    if(map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  });
+};
+
+// rail scrubbing, pointer and keyboard
+const rail = $('#railInner');
+let dragging = false;
+const railPos = e => {
+  const r = rail.getBoundingClientRect();
+  return clamp((e.clientX - r.left)/r.width, 0, 1);
+};
+rail.addEventListener('pointerdown', e => { dragging = true; stop();
+  rail.setPointerCapture(e.pointerId); setPos(railPos(e)); });
+rail.addEventListener('pointermove', e => { if(dragging) setPos(railPos(e)); });
+rail.addEventListener('pointerup', () => dragging = false);
+rail.addEventListener('keydown', e => {
+  if(e.key === 'ArrowRight'){ step(1); e.preventDefault(); }
+  if(e.key === 'ArrowLeft'){ step(-1); e.preventDefault(); }
+  if(e.key === ' '){ playing ? stop() : play(); e.preventDefault(); }
+});
+
+// ------------------------------------------------------------ controls
+function syncControls(){
+  $('#spy').value = opts.spy; $('#spyV').textContent = opts.spy.toFixed(1)+' s/yr';
+  $('#trans').value = opts.trans; $('#transV').textContent = opts.trans.toFixed(1)+' s';
+  $('#fps').value = opts.fps; $('#fpsV').textContent = opts.fps+' fps';
+  $('#pacing').value = opts.pacing;
+  document.querySelectorAll('[data-interp]').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.interp === opts.interp));
+}
+$('#spy').oninput = e => { opts.spy = +e.target.value;
+  $('#spyV').textContent = opts.spy.toFixed(1)+' s/yr'; setPos(pos); };
+$('#trans').oninput = e => { opts.trans = +e.target.value;
+  $('#transV').textContent = opts.trans.toFixed(1)+' s'; setPos(pos); };
+$('#fps').oninput = e => { opts.fps = +e.target.value; $('#fpsV').textContent = opts.fps+' fps'; };
+$('#drift').oninput = e => { opts.drift = +e.target.value;
+  $('#driftV').textContent = opts.drift ? '+'+(opts.drift*2.2).toFixed(1)+' zoom' : 'off'; };
+$('#pacing').onchange = e => { opts.pacing = e.target.value;
+  buildTimeline(); buildRail(); setPos(pos); };
+document.querySelectorAll('[data-interp]').forEach(b => b.onclick = () => {
+  opts.interp = b.dataset.interp; syncControls(); setPos(pos); });
+$('#panelToggle').onclick = e => {
+  const p = $('#panel'); p.classList.toggle('closed');
+  const open = !p.classList.contains('closed');
+  e.currentTarget.textContent = open ? 'Hide' : 'Show';
+  e.currentTarget.setAttribute('aria-expanded', open);
+};
+
+// ------------------------------------------------------------ export
+function say(msg){ $('#status').textContent = msg; }
+function progress(f){
+  const p = $('#progress'); p.style.display = f === null ? 'none' : 'block';
+  if(f !== null) p.firstElementChild.style.width = (f*100)+'%';
+}
+
+// Real-time capture. Fast, shareable, and honest about being real time:
+// if the browser drops a frame the recording drops it too.
+$('#exportWebm').onclick = async () => {
+  if(!timeline.length) return say('Nothing to record yet.');
+  stop();
+  const canvas = map.getCanvas();
+  const stream = canvas.captureStream(opts.fps);
+  const mime = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m));
+  if(!mime) return say('This browser cannot record WebM. Use Frames instead.');
+  const rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond: 12e6});
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => {
+    const url = URL.createObjectURL(new Blob(chunks, {type:'video/webm'}));
+    const a = document.createElement('a');
+    a.href = url; a.download = ($('#take').value || 'corridor') + '.webm'; a.click();
+    URL.revokeObjectURL(url);
+    say('WebM saved.'); progress(null);
+  };
+  setPos(0); rec.start();
+  const total = totalSeconds() * 1000;
+  const t0 = performance.now();
+  say('Recording in real time…');
+  (function run(){
+    const f = (performance.now() - t0) / total;
+    progress(clamp(f,0,1));
+    setPos(clamp(f,0,1));
+    if(f < 1) requestAnimationFrame(run); else rec.stop();
+  })();
+};
+
+// Deterministic capture. Renders each frame, waits for the map to settle,
+// then posts the PNG to serve.py. Slower, but every frame lands.
+$('#exportFrames').onclick = async () => {
+  if(!timeline.length) return say('Nothing to render yet.');
+  stop();
+  const take = ($('#take').value || 'corridor').replace(/[^A-Za-z0-9_-]/g,'') || 'corridor';
+  const total = totalSeconds();
+  const count = Math.max(2, Math.round(total * opts.fps));
+  const btn = $('#exportFrames'); btn.disabled = true;
+  say(`Rendering ${count} frames at ${opts.fps} fps…`);
+
+  for(let i = 0; i < count; i++){
+    setPos(i/(count-1));
+    await settled();
+    const blob = await new Promise(r => map.getCanvas().toBlob(r, 'image/png'));
+    const res = await fetch(`/frames/${take}/${i}`, {
+      method:'POST', body: blob,
+      headers:{'Content-Type':'image/png','X-Fps':String(opts.fps),
+               'X-Final': i === count-1 ? '1' : '0'}
+    });
+    if(!res.ok){ say('Frame post failed — is serve.py running?'); btn.disabled = false; return; }
+    progress((i+1)/count);
+  }
+  btn.disabled = false; progress(null);
+  say(`${count} frames in export/${take}/. ffmpeg command printed in the serve.py terminal.`);
+};
+
+// wait for the map to finish drawing before grabbing the canvas
+function settled(){
+  return new Promise(res => {
+    if(map.loaded() && !map.isMoving()){
+      map.triggerRepaint();
+      map.once('idle', () => requestAnimationFrame(()=>res()));
+      setTimeout(res, 400); // never hang on a stalled tile
+    } else {
+      map.once('idle', () => requestAnimationFrame(()=>res()));
+      setTimeout(res, 800);
+    }
+  });
+}
+</script>
+</body>
+</html>
