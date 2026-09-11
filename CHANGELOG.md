@@ -16,6 +16,13 @@ Coverage past the corridor, and a viewer that can carry it.
   artefact you keep.
 
 ### Fixed
+- **The basemap asked for tiles that cannot exist.** OpenStreetMap serves to
+  zoom 19; past that every request was a round trip to a refusal, retried three
+  times with backoff — 6.7 seconds of a worker thread per tile, and a burst of
+  pointless load on OSM whenever you zoomed in close. The source now declares
+  `max_zoom` and the viewer overzooms instead of asking.
+- The tile proxy no longer retries a 4xx. A refusal is an answer, not a hiccup:
+  the tile is outside the source's coverage or zoom range and will never arrive.
 - **`fetch` ignored the area of interest entirely.** It pulled every row in the
   catalogue with a GeoTIFF, so once the catalogue reached 4 km past the corridor
   a `--georef-only` run meant 199 frames and 9.4 GB regardless of what you

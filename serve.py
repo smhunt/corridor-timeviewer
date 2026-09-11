@@ -188,6 +188,14 @@ class Handler(SimpleHTTPRequestHandler):
                     with urllib.request.urlopen(req, timeout=30) as r:
                         blob = r.read()
                     break
+                except urllib.error.HTTPError as exc:
+                    # 4xx is an answer, not a hiccup: the tile is outside the
+                    # source's coverage or zoom range and will never arrive.
+                    # Retrying holds a worker thread for seconds per tile.
+                    last = exc
+                    if exc.code < 500:
+                        break
+                    time.sleep(0.4 * (attempt + 1))
                 except Exception as exc:  # noqa: BLE001
                     last = exc
                     time.sleep(0.4 * (attempt + 1))

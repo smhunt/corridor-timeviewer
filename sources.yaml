@@ -102,6 +102,7 @@ rasters:
     role: basemap          # drawn under every year, not part of the sequence
     format: png
     url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    max_zoom: 19           # OSM serves no deeper; past this the viewer overzooms
     attribution: "\u00a9 OpenStreetMap contributors"
     licence: ODbL
     note: >

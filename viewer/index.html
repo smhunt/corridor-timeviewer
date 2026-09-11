@@ -405,6 +405,9 @@ function addBasemap(rasters){
   if(!b) return;
   map.addSource('basemap', {
     type:'raster', tiles:[`/tiles/${b.id}/{z}/{x}/{y}`], tileSize:256,
+    // Past a source's deepest zoom the tiles do not exist. Without this the
+    // map asks anyway and every request is a round trip to a refusal.
+    maxzoom: b.max_zoom || 19,
     attribution: b.attribution || ''
   });
   map.addLayer({id:'basemap', type:'raster', source:'basemap',
