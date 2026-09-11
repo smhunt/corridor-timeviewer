@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0] - 2026-09-11
+
+Coverage past the corridor, and a viewer that can carry it.
+
+### Added
+- **Frames load lazily.** Years are built when the playhead needs them — the
+  pair in play plus the one ahead — and released oldest-first beyond a six-year
+  window. Every placed frame is a couple of megabytes of PNG, so building all of
+  them up front cost 62 MB at 22 frames and would have cost roughly half a
+  gigabyte at 199.
+- Both exporters build every year first and hold it for the duration. Lazy
+  loading is right for scrubbing and wrong for a render: a year still decoding
+  when its frame is captured is a frame of nothing, and the render is the
+  artefact you keep.
+
+### Fixed
+- **`fetch` ignored the area of interest entirely.** It pulled every row in the
+  catalogue with a GeoTIFF, so once the catalogue reached 4 km past the corridor
+  a `--georef-only` run meant 199 frames and 9.4 GB regardless of what you
+  asked for. It now honours the same scope as `survey` and `manifest`, which is
+  what makes "catalogue a township, download a corridor" actually work.
+
 ## [0.2.0] - 2026-09-09
 
 Seeing past the corridor, and knowing what exists out there.

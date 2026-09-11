@@ -292,7 +292,7 @@ select,input[type=text]{width:100%;background:var(--ink);color:var(--bright);
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 const ROADMAP = [
   {pri:'high', label:'High', note:'the record has holes where the story is', items:[
@@ -311,6 +311,10 @@ const ROADMAP = [
 ];
 
 const CHANGELOG = [
+  {version:'0.3.0', date:'2026-09-11', changes:[
+    'Frames load lazily — years build as the playhead reaches them, and release behind it.',
+    'Exports build every year first and hold it, so no frame captures a year mid-decode.',
+    'fetch honours the area of interest; it used to pull the whole catalogue.']},
   {version:'0.2.0', date:'2026-09-09', changes:[
     'Catalogue reaches past the subject: context_m / --expand, 1,063 photos across 20 years.',
     'Holdings layer — every exposure the archive holds, placed or not.',
@@ -334,6 +338,10 @@ let timeline = [];       // [{year, t}] normalised 0..1 positions
 let pos = 0;             // continuous position along the timeline
 let playing = false, rafId = null, lastT = 0;
 let shownHoldings = null;   // year currently drawn in the holdings layer
+let UNDER;                  // beforeId imagery is inserted under
+let touched = [];           // years on the map, least recently used first
+let holdAll = false;        // true during a frame export: build all, drop none
+const YEAR_WINDOW = 6;      // years kept resident while scrubbing
 let opts = {pacing:'chronological', spy:1.6, interp:'crossfade', trans:0.8,
             fps:30, drift:0, loop:true};
 
@@ -480,29 +488,76 @@ function buildYears(){
   // georeferenced is part of the record, and the thin notch says so.
   for(const y of (M.years || [])) if(!byYear.has(y.year)) byYear.set(y.year, []);
 
+  // Described now, built when the playhead needs them. Every placed frame is
+  // a couple of megabytes of PNG; a well-covered corridor is hundreds of them,
+  // and building all of it up front costs half a gigabyte before the map draws
+  // a thing.
+  UNDER = under;
   YEARS = [...byYear.keys()].sort((a,b)=>a-b).map(year => {
-    const items = byYear.get(year), layers = [];
-    items.forEach((it, i) => {
-      const id = `y${year}_${i}`;
-      if(it.raster){
-        map.addSource(id, {type:'raster', tiles:[`/tiles/${it.raster.id}/{z}/{x}/{y}`], tileSize:256});
-        map.addLayer({id, type:'raster', source:id,
-          paint:{'raster-opacity':0,'raster-fade-duration':0}}, under);
-      } else {
-        map.addSource(id, {type:'image', url:'../'+it.web.path, coordinates:it.web.corners});
-        map.addLayer({id, type:'raster', source:id,
-          paint:{'raster-opacity':0,'raster-fade-duration':0,'raster-resampling':'linear'}}, under);
-      }
-      layers.push(id);
-    });
+    const items = byYear.get(year);
     const meta = (M.years||[]).find(y=>y.year===year) || {};
-    return {year, layers, catalogued: meta.photos || items.length, placed: layers.length};
+    return {year, items, layers:[], built:false,
+            catalogued: meta.photos || items.length, placed: items.length};
   });
 
   if(!YEARS.length){
     $('#status').textContent = 'No georeferenced frames cached yet. Run ./harvest.py fetch --georef-only';
   }
   buildTimeline();
+}
+
+// Build one year's layers. Idempotent: a year already on the map is left be,
+// and its position in the use order is refreshed.
+function ensureYear(y){
+  if(!y) return;
+  touched = touched.filter(v => v !== y.year).concat(y.year);
+  if(y.built) return;
+  y.items.forEach((it, i) => {
+    const id = `y${y.year}_${i}`;
+    if(map.getLayer(id)) return;
+    if(it.raster){
+      map.addSource(id, {type:'raster', tiles:[`/tiles/${it.raster.id}/{z}/{x}/{y}`], tileSize:256});
+      map.addLayer({id, type:'raster', source:id,
+        paint:{'raster-opacity':0,'raster-fade-duration':0}}, UNDER);
+    } else {
+      map.addSource(id, {type:'image', url:'../'+it.web.path, coordinates:it.web.corners});
+      map.addLayer({id, type:'raster', source:id,
+        paint:{'raster-opacity':0,'raster-fade-duration':0,'raster-resampling':'linear'}}, UNDER);
+    }
+    y.layers.push(id);
+  });
+  y.built = true;
+}
+
+// Drop years the playhead has left, oldest use first. Held during a frame
+// export, where every year is built up front and nothing may vanish mid-render.
+function releaseYears(){
+  if(holdAll) return;
+  while(touched.length > YEAR_WINDOW){
+    const year = touched.shift();
+    const y = YEARS.find(v => v.year === year);
+    if(!y || !y.built) continue;
+    y.layers.forEach(id => {
+      if(map.getLayer(id)) map.removeLayer(id);
+      if(map.getSource(id)) map.removeSource(id);
+    });
+    y.layers = []; y.built = false;
+  }
+}
+
+// Before an export, put every year on the map and keep it there. Lazy loading
+// is right for scrubbing and wrong for a render: a year still decoding when
+// its frame is captured is a frame of nothing, and the render is the artefact
+// you keep.
+async function buildEverything(note){
+  holdAll = true;
+  YEARS.forEach(ensureYear);
+  say(note);
+  await new Promise(res => {
+    const done = () => { map.off('idle', done); res(); };
+    map.on('idle', done);
+    setTimeout(done, 20000);   // never hang on one stalled image
+  });
 }
 
 // Timeline positions. Chronological spaces years by elapsed time so a long
@@ -545,6 +600,14 @@ function setPos(p, snapCam){
   const x = share <= 0 ? (raw < 1 ? 0 : 1)
           : clamp((raw - (1 - share)) / share, 0, 1);
   const blend = easeFn(x);
+
+  // Build the pair in play, plus the one after, so a step or a play does not
+  // land on an empty year while its images decode.
+  ensureYear(YEARS.find(v => v.year === a.year));
+  ensureYear(YEARS.find(v => v.year === b.year));
+  const ahead = timeline[Math.min(i + 2, timeline.length - 1)];
+  if(ahead) ensureYear(YEARS.find(v => v.year === ahead.year));
+  releaseYears();
 
   YEARS.forEach(y => {
     let o = 0;
@@ -798,6 +861,7 @@ function progress(f){
 $('#exportWebm').onclick = async () => {
   if(!timeline.length) return say('Nothing to record yet.');
   stop();
+  await buildEverything('Loading every year before recording…');
   const canvas = map.getCanvas();
   const stream = canvas.captureStream(opts.fps);
   const mime = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
@@ -811,7 +875,7 @@ $('#exportWebm').onclick = async () => {
     const a = document.createElement('a');
     a.href = url; a.download = ($('#take').value || 'corridor') + '.webm'; a.click();
     URL.revokeObjectURL(url);
-    say('WebM saved.'); progress(null);
+    say('WebM saved.'); progress(null); holdAll = false;
   };
   setPos(0); rec.start();
   const total = totalSeconds() * 1000;
@@ -834,6 +898,7 @@ $('#exportFrames').onclick = async () => {
   const total = totalSeconds();
   const count = Math.max(2, Math.round(total * opts.fps));
   const btn = $('#exportFrames'); btn.disabled = true;
+  await buildEverything(`Loading every year before rendering…`);
   say(`Rendering ${count} frames at ${opts.fps} fps…`);
 
   for(let i = 0; i < count; i++){
@@ -845,10 +910,11 @@ $('#exportFrames').onclick = async () => {
       headers:{'Content-Type':'image/png','X-Fps':String(opts.fps),
                'X-Final': i === count-1 ? '1' : '0'}
     });
-    if(!res.ok){ say('Frame post failed — is serve.py running?'); btn.disabled = false; return; }
+    if(!res.ok){ say('Frame post failed — is serve.py running?');
+                 btn.disabled = false; holdAll = false; return; }
     progress((i+1)/count);
   }
-  btn.disabled = false; progress(null);
+  btn.disabled = false; progress(null); holdAll = false;
   say(`${count} frames in export/${take}/. ffmpeg command printed in the serve.py terminal.`);
 };
 

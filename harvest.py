@@ -291,9 +291,16 @@ def cmd_fetch(args):
     where = "geotiff_url IS NOT NULL" if args.georef_only else "scan_url IS NOT NULL"
     if args.year:
         where += f" AND year IN ({','.join(str(int(y)) for y in args.year)})"
+
+    # The catalogue is deliberately wider than what you want on disk -- you can
+    # survey a township and download a corridor. Without this the cache is
+    # whatever the widest past survey happened to reach.
+    area = aoi.resolve(getattr(args, "aoi", None), getattr(args, "expand", None))
+    w, s_, e, n = area["scope"]
+    where += (" AND (lon IS NULL OR (lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?))")
     rows = conn.execute(
         f"SELECT photo_id, year, scan_url, geotiff_url FROM photo WHERE {where}"
-        " ORDER BY year, roll, line, number"
+        " ORDER BY year, roll, line, number", (w, e, s_, n)
     ).fetchall()
     if not rows:
         print("Nothing matches. Run `./harvest.py survey` first.")

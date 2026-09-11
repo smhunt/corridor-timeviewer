@@ -23,10 +23,6 @@ changing over a century.
 
 ## Medium — the viewer strains as coverage grows
 
-- **Load frames lazily.** Every placed frame becomes an image source at page
-  load. At 22 frames that is 62 MB; at 199 it would be roughly 500 MB before
-  the map draws anything. Build layers per year on demand, and drop years the
-  playhead has left.
 - **Fit to holdings.** "Fit corridor" frames the subject. There is no way to
   frame everything actually on disk, which now reaches well past the corridor.
 - **Filter holdings by availability.** With 1,063 exposures catalogued, a year
@@ -34,6 +30,13 @@ changing over a century.
   alone.
 - **Per-year opacity or a swipe.** Crossfade compares two years at a time.
   Reading a specific change often wants a wipe across one frame instead.
+
+## Done
+
+- **Frames load lazily** (0.3.0). Years are built when the playhead needs them,
+  three at a time, and released oldest-first beyond a six-year window. Exports
+  build every year up front and hold it, because a year still decoding when its
+  frame is captured is a frame of nothing.
 
 ## Low — worth doing, nothing blocked on them
 
