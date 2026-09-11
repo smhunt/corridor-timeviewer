@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Where it stands
+
+The Ilderton spur, catalogued 4 km past the corridor: 1,070 exposures across
+20 capture years, 199 of them shipping georeferenced, 80 placed and on disk
+(1945, 1946, 1950, 1955, 1967, 1971, 1972, 1974) at about 3.9 GB of cache.
+The current Ontario basemap joins the sequence as 2025. Nothing is placed
+between 1978 and 2025 — that gap is hand work, not a bug. See `ROADMAP.md`.
+
 ## What this is
 
 A local-first pipeline for reading how a place changed from archival aerial photography:

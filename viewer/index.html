@@ -272,6 +272,13 @@ select,input[type=text]{width:100%;background:var(--ink);color:var(--bright);
       every scan is black. They are placed as four-corner quads, which keeps
       the image honest instead of smearing it into a lat/lon rectangle and
       letting the black wedges cover the neighbouring frame.</p>
+      <h3>What is placed, and what is not</h3>
+      <p>80 frames are on disk, across 1945, 1946, 1950, 1955, 1967, 1971, 1972
+      and 1974, plus the current Ontario basemap as 2025. Nothing sits between
+      1978 and 2025: those years are either unscanned or need georeferencing by
+      hand. A thin notch on the rail is one of them, and it is on the rail
+      because the archive holds the photographs — they just are not placeable
+      yet.</p>
       <h3>Beyond the corridor</h3>
       <p>The map opens on the subject but is not confined to it. The catalogue
       reaches <code>context_m</code> past the corridor, so panning out finds
@@ -296,11 +303,10 @@ const APP_VERSION = '0.3.0';
 
 const ROADMAP = [
   {pri:'high', label:'High', note:'the record has holes where the story is', items:[
-    'Georeference 1993, 1998 and 2001 — the years the track came out, none with a downloadable scan.',
-    'Georeference 1950 and 1978: the densest years in the archive, contributing nothing to the animation.',
+    '1989 to 2001 brackets the track coming out: 309 photos, 35 downloadable scans, nothing georeferenced.',
+    '1950 holds 215 scans and 16 georeferenced, 4 placed. 1978 holds 118 and not one is georeferenced.',
     'Fold in SWOOP 2006/2010/2015/2020 — open licence, and exactly the decades between the last air photo and today.']},
   {pri:'med', label:'Medium', note:'the viewer strains as coverage grows', items:[
-    'Load frames lazily. Every placed frame becomes an image source at page load.',
     'Fit to holdings, not just to the corridor.',
     'Filter holdings by availability — 1950 covers the map in dots.',
     'Per-year opacity or a swipe, for reading one change rather than comparing two years.']},

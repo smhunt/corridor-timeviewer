@@ -5,15 +5,16 @@ changing over a century.
 
 ## High — the record has holes where the story is
 
-- **Georeference the trail-era years.** 1993, 1998 and 2001 bracket the track
-  coming out, and none of them has a downloadable scan. They have to be ordered
+- **Georeference the trail-era years.** 1989 through 2001 bracket the track
+  coming out: 309 photos, 35 downloadable scans, nothing georeferenced. They have to be ordered
   from NAPL or scanned at Weldon, georeferenced in QGIS against a modern
   orthophoto, and dropped into `cache/manual/<year>/` for `adopt`. Road
   intersections hold still across the century and make good control points; the
   grade itself does not, since it is what is being measured.
-- **Georeference 1950 and 1978.** 215 and 118 scans over the wider area, none
-  georeferenced. These are the densest years in the archive and currently
-  contribute nothing to the animation.
+- **Georeference 1950 and 1978.** 1950 holds 215 scans and only 16 of them
+  ship georeferenced — 4 are placed. 1978 holds 118 and not one is
+  georeferenced, so it contributes nothing at all. These are the two densest
+  years in the archive.
 - **Fold in SWOOP 2006 / 2010 / 2015 / 2020.** Open licence, 16-30 cm, and
   exactly the decades between the last air photo and today. Ontario publishes
   only "current best available" as a live service, so these come down as 1 km

@@ -15,6 +15,11 @@ Coverage past the corridor, and a viewer that can carry it.
   when its frame is captured is a frame of nothing, and the render is the
   artefact you keep.
 
+### Coverage
+- Fetched the georeferenced frames within 2 km of the corridor: **80 placed
+  across 8 years**, against 22 across 5. 1945, 1950 and 1972 have placed
+  imagery for the first time. Cache 3.9 GB.
+
 ### Fixed
 - **The basemap asked for tiles that cannot exist.** OpenStreetMap serves to
   zoom 19; past that every request was a round trip to a refusal, retried three

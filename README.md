@@ -37,25 +37,35 @@ it, `--http` forces plaintext.
 ./serve.py                               # https://dev.ecoworks.ca:3033
 ```
 
-`survey` prints a coverage table. For the rail corridor:
+`survey` prints a coverage table. For the rail corridor and 4 km around it
+(`context_m` in the profile — the corridor alone is 210 photos across 14
+years):
 
 ```
   year    photos   scans  georef   coverage
-  1942         1       1       0   █
-  1946         2       2       2   █
-  1950        46      46       0   ██████████████████
-  1955        20      20       5   ████████
-  1967        11      11      11   ████
-  1970         9       9       0   ████
-  1971         7       7       1   ███
-  1974         3       3       3   █
-  1978        35      35       0   ██████████████
-  1982         5       0       0   ██
-  1989        14      11       0   █████
-  1993        28       0       0   ███████████
-  1998        21       0       0   ████████
-  2001        13       0       0   █████
-  total      215     145      22
+  ----------------------------------------------------
+  1922        71      71       0   ██████
+  1942        22      22       0   ██
+  1945        57      57      18   █████
+  1946        14      14      12   █
+  1950       215     215      16   ██████████████████
+  1955        70      70      22   ██████
+  1960         1       1       1   █
+  1964         5       5       0   █
+  1965         3       3       3   █
+  1967        48      48      48   ████
+  1970        26      26       1   ██
+  1971        22      22       3   ██
+  1972         2       2       2   █
+  1974        73      73      73   ██████
+  1978       118     101       0   ██████████
+  1982        14       0       0   █
+  1989        56      35       0   █████
+  1993       129       0       0   ███████████
+  1998        80       0       0   ███████
+  2001        44       0       0   ████
+  ----------------------------------------------------
+  total     1070     765     199
 ```
 
 Three columns, three different things. **photos** is what the archive holds.
@@ -240,11 +250,20 @@ frame lands, `serve.py` prints the command:
 
 ## Where this needs hand work
 
-The 22 georeferenced frames over the rail corridor are enough to see the
-sequence, but they are thin in exactly the interesting decades. 1950 has 46
-scans and none georeferenced; 1978 has 35 and none; 1993 through 2001 — the
-years the track actually came out — have no downloadable scans at all and have
-to be ordered or scanned at Weldon.
+80 frames are placed, across 1945, 1946, 1950, 1955, 1967, 1971, 1972 and
+1974. That is enough to read the corridor through the middle of the century,
+and it is thin in exactly the decades that matter.
+
+The archive holds 1,070 exposures over this area and 765 of them can be
+downloaded, but only 199 ship georeferenced. The gap is concentrated where the
+story is. 1950 has 215 scans and 16 georeferenced. 1978 has 118 and none. And
+1989 through 2001 — the years the track actually came out — have 309 photos
+between them and 35 downloadable scans, none georeferenced, so they have to be
+ordered from NAPL or scanned at Weldon before they can be placed at all.
+
+The modern end is covered: the current Ontario basemap is SWOOP 2025, and SWOOP
+2006, 2010, 2015 and 2020 are open-licenced 1 km orthophoto tiles from GeoHub —
+three cover the corridor — which `adopt` folds straight in.
 
 The path forward is QGIS's georeferencer: pin control points on the raw scans
 against a modern orthophoto, export as GeoTIFF into `cache/manual/<year>/`, and
