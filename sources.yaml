@@ -133,18 +133,51 @@ rasters:
       can be labelled with the year it was actually flown rather than the year
       the service was published.
 
-  swoop:
-    label: Southwestern Ontario Orthophotography Project
-    status: untested
-    kind: geohub
-    portal: https://geohub.lio.gov.on.ca/pages/ontario-imagery-program
-    years: [2006, 2010, 2015, 2020]
-    resolutions_cm: {2006: 30, 2010: 20, 2015: 16, 2020: 16}
-    note: >
-      Pre-2013 acquisitions publish as hosted WMTS, 2013+ as ArcGIS Image
-      Services. Run `./serve.py discover swoop` to resolve the per-year
-      endpoints, then paste them back here as `xyz` entries.
+  # swoop_2006 / swoop_2010 -- NOT wired in. Both would be live LIO caches on
+  # tiles.arcgis.com (SWOOP_2006_TPK / SWOOP_2010_TPK), same host and
+  # tile/WMTS URL scheme as swoop_2015/2020 below, but every tile path 404s
+  # straight from tiles.arcgis.com itself: plain /tile/{z}/{y}/{x}, the
+  # WMTS-profile path (same scheme ontario_oiwms uses successfully), and
+  # /export all fail, even though the ArcGIS Online items are public and
+  # their MapServer roots resolve fine via ?f=json with a normal-looking
+  # tileInfo and WMTS capabilities document. The underlying tile cache looks
+  # to have been deleted while the item metadata endpoints were left live.
+  # The companion 1km-index FeatureServers (e.g.
+  # services9.arcgis.com/.../SWOOP2006/FeatureServer) only carry tile
+  # *footprints and filenames* (e.g. "1km174720476602006SWOOP"), no
+  # attachments and no download-URL field, so there's no API path to the
+  # actual imagery either, live or as a file. Getting 2006/2010 requires the
+  # GeoHub web UI's download flow by hand (same manual-adoption shape as
+  # NAPL) -- not something fetchable by URL. Left out of `rasters:` so the
+  # viewer doesn't grow two permanently-blank stops on the year rail; add
+  # real entries here once someone finds a working source.
+
+  swoop_2015:
+    label: Southwestern Ontario Orthophotography (SWOOP) 2015
+    status: verified
+    kind: xyz
+    url: https://utility.arcgis.com/usrsvcs/servers/28054e20674845ae8476a1eb2e35f9e0/rest/services/Hosted/SWOOP2015/MapServer/tile/{z}/{y}/{x}
+    year: 2015
+    max_zoom: 20
     licence: Open Government Licence - Ontario
+    note: >
+      No province-wide LIO cache exists for this year (only county ImageServers
+      and 1km-index FeatureServers). This is Middlesex County's own hosted
+      cache, reached through ArcGIS Online's utility.arcgis.com proxy rather
+      than gis.middlesex.ca directly -- the direct host demands a token, but
+      the proxied copy is public. Extent covers Middlesex County only, which
+      is sufficient for this AOI but would NOT extend to a corridor outside
+      the county.
+
+  swoop_2020:
+    label: Southwestern Ontario Orthophotography (SWOOP) 2020
+    status: verified
+    kind: xyz
+    url: https://utility.arcgis.com/usrsvcs/servers/c30f75dc4e0b48969fa893c9f9cf7052/rest/services/Hosted/SWOOP2020/MapServer/tile/{z}/{y}/{x}
+    year: 2020
+    max_zoom: 20
+    licence: Open Government Licence - Ontario
+    note: Same Middlesex County cache arrangement as swoop_2015, one year newer.
 
   middlesex_county:
     label: Middlesex County orthophoto
